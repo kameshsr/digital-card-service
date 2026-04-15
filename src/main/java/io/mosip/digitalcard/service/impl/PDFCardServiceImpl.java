@@ -315,14 +315,28 @@ public class PDFCardServiceImpl implements CardGeneratorService {
 							// JSONArray node = JsonUtil.getJSONArray(demographicIdentity, value);
 							SimpleType[] jsonValues = Utility.mapJsonNodeToJavaObject(SimpleType.class, (JSONArray) obj);
 							for (SimpleType jsonValue : jsonValues) {
-								if (supportedLang.contains(jsonValue.getLanguage()))
-									attribute.put(value + "_" + jsonValue.getLanguage(), jsonValue.getValue());
+								if (supportedLang.contains(jsonValue.getLanguage())) {
+									String attrKey = value + "_" + jsonValue.getLanguage();
+									String attrVal = jsonValue.getValue();
+									if (attrVal != null && attrVal.chars().anyMatch(c -> c < 0x20 && c != 0x09 && c != 0x0A && c != 0x0D)) {
+										logger.warn("Attribute '{}' contains invalid XML control character(s). Hex chars: {}", attrKey, toHexString(attrVal));
+									}
+									attribute.put(attrKey, attrVal);
+								}
 							}
 						} else if (object instanceof JSONObject) {
 							JSONObject json = (JSONObject) object;
-							attribute.put(value, (String) json.get(VALUE));
+							String attrVal = (String) json.get(VALUE);
+							if (attrVal != null && attrVal.chars().anyMatch(c -> c < 0x20 && c != 0x09 && c != 0x0A && c != 0x0D)) {
+								logger.warn("Attribute '{}' contains invalid XML control character(s). Hex chars: {}", value, toHexString(attrVal));
+							}
+							attribute.put(value, attrVal);
 						} else {
-							attribute.put(value, String.valueOf(object));
+							String attrVal = String.valueOf(object);
+							if (attrVal.chars().anyMatch(c -> c < 0x20 && c != 0x09 && c != 0x0A && c != 0x0D)) {
+								logger.warn("Attribute '{}' contains invalid XML control character(s). Hex chars: {}", value, toHexString(attrVal));
+							}
+							attribute.put(value, attrVal);
 						}
 					}
 
@@ -332,6 +346,16 @@ public class PDFCardServiceImpl implements CardGeneratorService {
 				logger.error("Error while parsing Json file" ,e);
 		}
 
+	}
+
+	private String toHexString(String value) {
+		StringBuilder sb = new StringBuilder();
+		for (char c : value.toCharArray()) {
+			if (c < 0x20 && c != 0x09 && c != 0x0A && c != 0x0D) {
+				sb.append(String.format("[0x%02X]", (int) c));
+			}
+		}
+		return sb.toString();
 	}
 
 	private byte[] generateUinCard(InputStream in, String password) {
